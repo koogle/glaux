@@ -1,0 +1,124 @@
+# Local Deep‑Search Agent — Detailed Blueprint
+
+> **Purpose**  Create a self‑hosted “research concierge.” A user submits a question; the system plans research, delegates subtasks to specialised *personas* that execute tool calls (MCP servers), iterates until satisfied, and delivers a cited report.  Designed for a MacBook Pro (M3 Pro · 18 GB) but deployable via Docker later.
+
+---
+
+## 1  Layered Architecture (Persona ⇆ Tool separation)
+
+```
+┌─────────────┐   REST   ┌──────────────┐
+│  Interfaces │────────▶│ Orchestrator │
+│ (Web/Mail)  │         │  (Node TS)   │
+└─────────────┘         └────┬──────────┘
+                              │plans / jobs
+                              ▼
+                     ┌──────────────┐
+                     │  PERSONAS    │   "logical experts"
+                     │ (LLM prompts)│
+                     └────┬──────────┘
+          OpenAI API      │tool_calls / JSON
+                          ▼
+                  ┌──────────────┐   MCP  ┌────────────────┐
+                  │ llama-server │◀──────▶│  TOOL SERVERS  │
+                  │ (llama.cpp)  │        │ (Browser, …)   │
+                  └──────────────┘        └────────────────┘
+                                          ▲
+                                          │ artefacts
+                                          ▼
+                                   ┌──────────────┐
+                                   │  SQLite DB   │
+                                   └──────────────┘
+```
+
+* **Personas** – thin LLM wrappers (“Biomedical Researcher”, “Financial Analyst”, …). Each has a *system prompt* & allowed tools list.
+* **Tools (MCP servers)** – functional capabilities (browser, search, PDF, code‑exec…).
+* **Orchestrator** – receives query ➜ asks clarifiers ➜ builds a plan ➜ spawns personas ➜ merges outputs.
+
+---
+
+## 2  Component Specs
+
+### 2.1 Agent Personas (new)
+
+| Persona                                                                                        | Prompt seed                         | Default tools                     | Use case                                            |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------- | --------------------------------- | --------------------------------------------------- |
+| **Planner**                                                                                    | “You are a senior project manager…” | *none*                            | Break query into tasks & choose persona/tool combos |
+| **Biomedical Researcher**                                                                      | “You are a rigor‑obsessed PhD…”     | Brave Search, Browser, PDF‑reader | Clinical & life‑science queries                     |
+| **Financial Analyst**                                                                          | “You analyse SEC filings…”          | Browser, Code‑exec, CSV‑loader    | Markets, company due‑diligence                      |
+| *(add more)*                                                                                   |                                     |                                   |                                                     |
+| *Personas live in **`/src/personas/`** and are JSON definitions consumed by the Orchestrator.* |                                     |                                   |                                                     |
+
+### 2.2 Local LLM Endpoint
+
+* `llama.cpp` built with `LLAMA_OPENAI=1` supports **function/tool‑calling** so personas can invoke MCP servers via `tool_calls`.
+* Recommended models: Functionary 3‑8B, Qwen 2.5‑14B‑Chat‑FN, or Phi‑2‑Functionary (fits 18 GB).
+
+### 2.3 Orchestrator (Node 20 + TS)
+
+* **Flow**
+
+  1. **Clarify** – optional first round to ask user.
+  2. **Plan** – run Planner persona to emit an array of `{persona, tool, input}` steps.
+  3. **Execute** – fork the requested persona, stream `tool_calls` to MCP, capture results.
+  4. **Iterate / stop** – until `finish` tag or limits.
+  5. **Compose** – merge persona memos → cohesive Markdown + citations.
+* **Guards** – max 6 iterations or 5 min wall time.
+
+### 2.4 Tool Servers (MCP)
+
+| Server       | Package                                     | Capability                   |
+| ------------ | ------------------------------------------- | ---------------------------- |
+| Browser‑base | `@modelcontextprotocol/server-browser-base` | Navigate, scrape, screenshot |
+| Brave Search | `@modelcontextprotocol/server-brave-search` | JSON web search              |
+| Roadmap      | PDF‑reader, Wolfram, Code‑exec              | Plug‑and‑play                |
+
+### 2.5 Data Store, Interfaces, etc.
+
+(unchanged — see original sections 2.4 → 2.5.)
+
+---
+
+## 3  Step‑by‑Step Setup
+
+*(identical to previous version; retained for brevity)*
+
+---
+
+## 4  Codebase Layout
+
+```
+./src
+ ├─ personas/        # *.json persona definitions
+ ├─ agents/          # planner.ts, executor.ts, composer.ts
+ ├─ tools/           # mcpClient.ts wrappers
+ ├─ interfaces/      # web/, email/
+ ├─ db/              # migrations/, schema.ts
+ └─ index.ts
+```
+
+---
+
+## 5  Backlog & Open Questions
+
+*(section retained; personas will add new backlog items.)*
+
+---
+
+## 6  Project Name Inspiration
+
+Athena’s owl is traditionally called **“Glaux”** (Greek for “little owl”; Latin *Athene noctua*).  In modern pop culture, the mechanical owl in *Clash of the Titans* is **“Bubo.”**  Suggested project names:
+
+| Name          | Rationale                                         |
+| ------------- | ------------------------------------------------- |
+| **Glaux**     | Direct mythological link; short & unique.         |
+| **Glaukopis** | Epithet of Athena meaning “bright‑eyed.”          |
+| **Bubo**      | Friendly nod to cinematic owl; easy to pronounce. |
+| **Noctua**    | Scientific genus; hints at nocturnal research.    |
+
+Pick whichever vibe suits the project; *Glaux* is closest to the original lore.
+
+---
+
+*Treat this blueprint as the living spec.  Discuss major changes via PR or inline canvas comments.*
+
