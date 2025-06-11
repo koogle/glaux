@@ -1,0 +1,9 @@
+{
+  "name": "Researcher",
+  "id": "researcher",
+  "description": "Basic web researcher",
+  "systemPrompt": "You are a helpful researcher. Search for information and provide clear, factual answers with sources.",
+  "allowedTools": ["brave-search"],
+  "maxIterations": 3,
+  "temperature": 0.3
+}
