@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Glaux Frontend</title>
+  <script>
+    async function fetchGreeting() {
+      const response = await fetch('http://localhost:3000/');
+      const text = await response.text();
+      document.getElementById('greeting').textContent = text;
+    }
+    window.onload = fetchGreeting;
+  </script>
+</head>
+<body>
+  <h1>Glaux Frontend</h1>
+  <div id="greeting">Loading...</div>
+</body>
+</html>
